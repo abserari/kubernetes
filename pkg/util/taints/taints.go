@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"strings"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -177,7 +177,8 @@ func ReorganizeTaints(node *v1.Node, overwrite bool, taintsToAdd []v1.Taint, tai
 	newTaints := append([]v1.Taint{}, taintsToAdd...)
 	oldTaints := node.Spec.Taints
 	// add taints that already existing but not updated to newTaints
-	added := addTaints(oldTaints, &newTaints)
+	addedTaints, added := addTaints(oldTaints, &newTaints)
+	newTaints = append(newTaints, addedTaints...)
 	allErrs, deleted := deleteTaints(taintsToRemove, &newTaints)
 	if (added && deleted) || overwrite {
 		return MODIFIED, newTaints, utilerrors.NewAggregate(allErrs)
@@ -206,8 +207,7 @@ func deleteTaints(taintsToRemove []v1.Taint, newTaints *[]v1.Taint) ([]error, bo
 }
 
 // addTaints adds the newTaints list to existing ones and updates the newTaints List.
-// TODO: This needs a rewrite to take only the new values instead of appended newTaints list to be consistent.
-func addTaints(oldTaints []v1.Taint, newTaints *[]v1.Taint) bool {
+func addTaints(oldTaints []v1.Taint, newTaints *[]v1.Taint) (addedTaints []v1.Taint, added bool) {
 	for _, oldTaint := range oldTaints {
 		existsInNew := false
 		for _, taint := range *newTaints {
@@ -217,10 +217,10 @@ func addTaints(oldTaints []v1.Taint, newTaints *[]v1.Taint) bool {
 			}
 		}
 		if !existsInNew {
-			*newTaints = append(*newTaints, oldTaint)
+			addedTaints = append(addedTaints, oldTaint)
 		}
 	}
-	return len(oldTaints) != len(*newTaints)
+	return addedTaints, len(oldTaints) != (len(*newTaints) + len(addedTaints))
 }
 
 // CheckIfTaintsAlreadyExists checks if the node already has taints that we want to add and returns a string with taint keys.
